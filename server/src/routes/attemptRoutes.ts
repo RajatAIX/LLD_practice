@@ -1,0 +1,10 @@
+import { Router } from "express";
+import { AttemptController } from "../controllers/AttemptController.js";
+import { validate, createAttemptSchema } from "../middleware/validateMiddleware.js";
+const router = Router();
+router.get("/", AttemptController.getAllAttempts);
+router.post("/", validate(createAttemptSchema), AttemptController.createAttempt);
+router.get("/:id", AttemptController.getAttempt);
+router.post("/:id/submit", AttemptController.submitAttempt);
+router.delete("/:id", AttemptController.deleteAttempt);
+export default router;
