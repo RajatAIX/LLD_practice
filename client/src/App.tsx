@@ -69,47 +69,57 @@ interface EvaluationResult {
 }
 
 // ── API Config ────────────────────────────────────────────────────────────
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:5000/api/v1';
+function normalizeApiUrl(rawUrl?: string): string {
+  let url = (rawUrl || 'http://localhost:5000/api/v1').trim().replace(/\/+$/, '');
+  if (url.endsWith('/api')) {
+    return `${url}/v1`;
+  }
+  if (!url.endsWith('/api/v1')) {
+    return `${url}/api/v1`;
+  }
+  return url;
+}
+const API_BASE = normalizeApiUrl(import.meta.env.VITE_API_URL);
 
 // ── Default Fallback Problems (Ensures catalog is never empty during server reloads) ──
 const DEFAULT_FALLBACK_PROBLEMS: Problem[] = [
   {
-    id: "16c4f0a3-06c8-490f-923e-b074fea95e0e",
+    id: "8198cb44-7b39-4d91-809b-7874683cd1ca",
     title: "Design a Parking Lot",
     description: "Design a multi-level parking lot system. It should support multiple vehicle types and different pricing models.",
     difficulty: "MEDIUM",
     requirements: ["Support Cars, Motorcycles, and Trucks.", "Calculate fee based on time spent.", "Handle entry and exit gates."]
   },
   {
-    id: "6526e2a9-3ff8-489f-8cfa-ec4d263e1851",
+    id: "07b9edc5-db6c-42bb-8fa2-285d99ada094",
     title: "Design an Elevator System",
     description: "Design an elevator system for a multi-story building that optimizes wait times.",
     difficulty: "HARD",
     requirements: ["Handle internal and external requests.", "Support emergency stops.", "Optimize dispatch algorithm."]
   },
   {
-    id: "6d4ced55-9c6a-44fe-85df-e4c6adc09416",
+    id: "3b0740f6-611a-4fa7-b189-5768fd3b735e",
     title: "Design a Vending Machine",
     description: "Design a state machine for a vending machine.",
     difficulty: "EASY",
     requirements: ["Accept different denominations.", "Dispense product and change.", "Handle out of stock."]
   },
   {
-    id: "844a6e0a-31a5-47a7-8e42-fb6e3004d02e",
+    id: "5f0f1b5b-d2dd-48eb-8831-ced9840853d2",
     title: "Design a Library Management System",
     description: "Design a system to manage books, members, and lending operations in a library.",
     difficulty: "EASY",
     requirements: ["Track book inventory and availability.", "Manage member registrations.", "Handle borrow and return flows with due dates."]
   },
   {
-    id: "4a3c47f3-98af-4b9c-b2c4-f726102d2f65",
+    id: "e7c5576f-707b-41c6-a623-675346c404a1",
     title: "Design an ATM System",
     description: "Design the software for an ATM machine that handles deposits, withdrawals, and transfers.",
     difficulty: "MEDIUM",
     requirements: ["Authenticate users with card and PIN.", "Support cash withdrawal with denomination selection.", "Handle insufficient funds and daily limits."]
   },
   {
-    id: "7597208f-bf6f-4f1d-8734-c527f96372a4",
+    id: "e28a002e-876a-4faa-b63d-4d71ce860340",
     title: "Design an Online Food Ordering System",
     description: "Design a food delivery platform like Zomato/Swiggy at the LLD level.",
     difficulty: "HARD",
@@ -259,6 +269,8 @@ export default function App() {
         setActiveTab('history');
         if (urlAttemptId) {
           selectHistoryItem(urlAttemptId, false);
+        } else if (history.length > 0 && !selectedHistoryIdRef.current) {
+          selectHistoryItem(history[0].id, false);
         }
       } else {
         setActiveTab('practice');
@@ -266,14 +278,17 @@ export default function App() {
           openProblem(problemId, false);
         } else {
           // Navigated back to catalog
-          resetFlow();
+          setSelectedProblem(null);
+          setEvaluationState('none');
+          setEvaluationResult(null);
+          setError(null);
         }
       }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [problems, history]);
 
   useEffect(() => {
     return () => {
@@ -314,12 +329,12 @@ export default function App() {
     setLoadingHistory(false);
   };
 
-  const selectHistoryItem = async (id: string, pushToHistory = true) => {
+  const selectHistoryItem = async (id: string, updateUrl = true) => {
     setSelectedHistoryId(id);
-    if (pushToHistory) {
+    if (updateUrl) {
       const newUrl = `?tab=history&attempt=${encodeURIComponent(id)}`;
       if (window.location.search !== newUrl) {
-        window.history.pushState({ tab: 'history', attemptId: id }, '', newUrl);
+        window.history.replaceState({ page: 'history', attemptId: id }, '', newUrl);
       }
     }
     setLoadingHistoryDetail(true);
@@ -348,69 +363,59 @@ export default function App() {
     setLoadingHistoryDetail(false);
   };
 
-  const startAttempt = async (problemId: string) => {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const pRes = await fetch(`${API_BASE}/problems/${problemId}`);
-      if (!pRes.ok) throw new Error(`Could not load problem (HTTP ${pRes.status})`);
-      const pData = await pRes.json() as { data: Problem };
-      setSelectedProblem(pData.data);
-
-      const attRes = await fetch(`${API_BASE}/attempts`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ problemId }),
-      });
-      const attData = await attRes.json() as { success?: boolean; data?: { id: string }; message?: string };
-      if (!attRes.ok || !attData.data) {
-        throw new Error(attData.message || `Failed to create attempt (HTTP ${attRes.status})`);
-      }
-      setAttemptId(attData.data.id);
-
-      const subRes = await fetch(`${API_BASE}/submissions`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attemptId: attData.data.id, solution: '' }),
-      });
-      const subData = await subRes.json() as { success?: boolean; data?: { id: string }; message?: string };
-      if (!subRes.ok || !subData.data) {
-        throw new Error(subData.message || `Failed to create draft submission (HTTP ${subRes.status})`);
-      }
-      setSubmissionId(subData.data.id);
-
-      setSolutionText('');
-      setEvaluationState('none');
-      setEvaluationResult(null);
-      setError(null);
-    } catch (e: any) {
-      console.error('Failed to start attempt:', e);
-      setError(e.message || 'Failed to start attempt. Please try again.');
-    }
-    setSubmitting(false);
-  };
-
   const submitSolution = async () => {
     if (!solutionText.trim()) { setError('Please write your code before submitting.'); return; }
-    if (!submissionId || !attemptId) { setError('Please select a problem first.'); return; }
+    if (!selectedProblem) { setError('Please select a problem first.'); return; }
     setSubmitting(true);
     setError(null);
     try {
-      await fetch(`${API_BASE}/submissions/${submissionId}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ solution: solutionText }),
-      });
-      await fetch(`${API_BASE}/submissions/${submissionId}/submit`, { method: 'POST' });
-      await fetch(`${API_BASE}/attempts/${attemptId}/submit`, { method: 'POST' });
+      let currentAttemptId = attemptId;
+      let currentSubmissionId = submissionId;
+
+      if (!currentAttemptId) {
+        const attRes = await fetch(`${API_BASE}/attempts`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ problemId: selectedProblem.id }),
+        });
+        const attData = await attRes.json() as { success?: boolean; data?: { id: string }; message?: string };
+        if (!attRes.ok || !attData.data) {
+          throw new Error(attData.message || `Failed to create attempt (HTTP ${attRes.status})`);
+        }
+        currentAttemptId = attData.data.id;
+        setAttemptId(currentAttemptId);
+      }
+
+      if (!currentSubmissionId) {
+        const subRes = await fetch(`${API_BASE}/submissions`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attemptId: currentAttemptId, solution: solutionText }),
+        });
+        const subData = await subRes.json() as { success?: boolean; data?: { id: string }; message?: string };
+        if (!subRes.ok || !subData.data) {
+          throw new Error(subData.message || `Failed to create submission (HTTP ${subRes.status})`);
+        }
+        currentSubmissionId = subData.data.id;
+        setSubmissionId(currentSubmissionId);
+      } else {
+        await fetch(`${API_BASE}/submissions/${currentSubmissionId}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ solution: solutionText }),
+        });
+      }
+
+      await fetch(`${API_BASE}/submissions/${currentSubmissionId}/submit`, { method: 'POST' });
+      await fetch(`${API_BASE}/attempts/${currentAttemptId}/submit`, { method: 'POST' });
 
       const evalRes = await fetch(`${API_BASE}/evaluations/start`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ submissionId }),
+        body: JSON.stringify({ submissionId: currentSubmissionId }),
       });
       const evalData = await evalRes.json() as { data: { id: string } };
       setEvaluationState('loading');
       pollEvaluation(evalData.data.id);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Submission failed:', e);
-      setError('Submission failed. Please check your connection and try again.');
+      setError(e.message || 'Submission failed. Please check your connection and try again.');
       setEvaluationState('failed');
     }
     setSubmitting(false);
@@ -473,10 +478,24 @@ export default function App() {
     setSubmitting(true);
     setError(null);
     try {
-      const pRes = await fetch(`${API_BASE}/problems/${attempt.problemId}`);
-      if (!pRes.ok) throw new Error("Could not find problem");
-      const pData = await pRes.json() as { data: Problem };
-      setSelectedProblem(pData.data);
+      let problemData: Problem | null = null;
+      try {
+        const pRes = await fetch(`${API_BASE}/problems/${attempt.problemId}`);
+        if (pRes.ok) {
+          const pData = await pRes.json() as { data: Problem };
+          problemData = pData.data;
+        }
+      } catch (e) {
+        console.warn('Network issue fetching problem in resumeAttempt:', e);
+      }
+
+      if (!problemData) {
+        problemData = problems.find(p => p.id === attempt.problemId) ??
+          DEFAULT_FALLBACK_PROBLEMS.find(p => p.id === attempt.problemId) ?? null;
+      }
+
+      if (!problemData) throw new Error("Could not find problem");
+      setSelectedProblem(problemData);
       setAttemptId(attempt.id);
 
       const subRes = await fetch(`${API_BASE}/submissions/attempt/${attempt.id}`);
@@ -510,7 +529,7 @@ export default function App() {
 
       const newUrl = `?problem=${encodeURIComponent(attempt.problemId)}`;
       if (window.location.search !== newUrl) {
-        window.history.pushState({ tab: 'practice', problemId: attempt.problemId }, '', newUrl);
+        window.history.pushState({ page: 'problem', problemId: attempt.problemId, fromCatalog: true }, '', newUrl);
       }
     } catch (err: any) {
       console.error('Failed to resume attempt:', err);
@@ -523,50 +542,44 @@ export default function App() {
     if (pushToHistory) {
       const newUrl = `?problem=${encodeURIComponent(problemId)}`;
       if (window.location.search !== newUrl) {
-        window.history.pushState({ tab: 'practice', problemId }, '', newUrl);
+        window.history.pushState({ page: 'problem', problemId, fromCatalog: true }, '', newUrl);
       }
     }
     setActiveTab('practice');
-    if (selectedProblemRef.current?.id === problemId && attemptIdRef.current) {
+    if (selectedProblemRef.current?.id === problemId) {
       return;
     }
-    await startAttempt(problemId);
-  };
 
-  const handleBackToProblems = (pushToHistory = true) => {
-    resetFlow();
-    setActiveTab('practice');
-    if (pushToHistory) {
-      if (window.location.search || window.location.pathname !== '/') {
-        window.history.pushState({ tab: 'practice' }, '', window.location.pathname);
-      }
-    }
-  };
+    let targetProblem = problems.find(p => p.id === problemId) ??
+      DEFAULT_FALLBACK_PROBLEMS.find(p => p.id === problemId) ?? null;
 
-  const switchTab = (tab: 'practice' | 'history', pushToHistory = true) => {
-    setActiveTab(tab);
-    if (pushToHistory) {
-      if (tab === 'practice') {
-        if (selectedProblemRef.current) {
-          const newUrl = `?problem=${encodeURIComponent(selectedProblemRef.current.id)}`;
-          window.history.pushState({ tab: 'practice', problemId: selectedProblemRef.current.id }, '', newUrl);
-        } else {
-          window.history.pushState({ tab: 'practice' }, '', window.location.pathname);
+    if (!targetProblem) {
+      try {
+        const pRes = await fetch(`${API_BASE}/problems/${problemId}`);
+        if (pRes.ok) {
+          const pData = await pRes.json() as { data: Problem };
+          targetProblem = pData.data;
         }
-      } else {
-        const newUrl = selectedHistoryIdRef.current
-          ? `?tab=history&attempt=${encodeURIComponent(selectedHistoryIdRef.current)}`
-          : `?tab=history`;
-        window.history.pushState({ tab: 'history', attemptId: selectedHistoryIdRef.current }, '', newUrl);
+      } catch (err) {
+        console.warn('Could not fetch problem from API directly:', err);
       }
     }
-  };
 
-  const copySolutionCode = () => {
-    if (!solutionText) return;
-    navigator.clipboard.writeText(solutionText);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
+    if (targetProblem) {
+      setSelectedProblem(targetProblem);
+      let savedDraft = '';
+      try {
+        savedDraft = localStorage.getItem(`lld_draft_${targetProblem.id}`) ?? '';
+      } catch {}
+      setSolutionText(savedDraft);
+      setAttemptId(null);
+      setSubmissionId(null);
+      setEvaluationState('none');
+      setEvaluationResult(null);
+      setError(null);
+    } else {
+      setError('Problem not found');
+    }
   };
 
   const resetFlow = () => {
@@ -580,6 +593,45 @@ export default function App() {
     setEvaluationState('none');
     setEvaluationResult(null);
     setError(null);
+  };
+
+  const handleBackToProblems = (preferHistoryBack = false) => {
+    resetFlow();
+    if (preferHistoryBack && window.history.state?.fromCatalog) {
+      window.history.back();
+    } else {
+      setActiveTab('practice');
+      if (window.location.search || window.location.pathname !== '/') {
+        window.history.pushState({ page: 'catalog' }, '', window.location.pathname);
+      }
+    }
+  };
+
+  const switchTab = (tab: 'practice' | 'history', pushToHistory = true) => {
+    if (tab === 'practice') {
+      setActiveTab('practice');
+      resetFlow();
+      if (pushToHistory) {
+        if (window.location.search || window.location.pathname !== '/') {
+          window.history.pushState({ page: 'catalog' }, '', window.location.pathname);
+        }
+      }
+    } else {
+      setActiveTab('history');
+      if (pushToHistory) {
+        const newUrl = '?tab=history';
+        if (window.location.search !== newUrl) {
+          window.history.pushState({ page: 'history' }, '', newUrl);
+        }
+      }
+    }
+  };
+
+  const copySolutionCode = () => {
+    if (!solutionText) return;
+    navigator.clipboard.writeText(solutionText);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
   };
 
   const filteredProblems = problems.filter(p => {
@@ -771,7 +823,7 @@ export default function App() {
           {/* Left Specs Pane */}
           <aside className="studio-specs-pane">
             <div className="studio-specs-header">
-              <button className="studio-back-btn" onClick={() => handleBackToProblems()}>
+              <button className="studio-back-btn" onClick={() => handleBackToProblems(true)}>
                 <ArrowLeft size={15} /> Back to Problems
               </button>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -844,7 +896,15 @@ export default function App() {
               <textarea
                 className="editor-textarea-pro"
                 value={solutionText}
-                onChange={e => setSolutionText(e.target.value)}
+                onChange={e => {
+                  const val = e.target.value;
+                  setSolutionText(val);
+                  if (selectedProblem) {
+                    try {
+                      localStorage.setItem(`lld_draft_${selectedProblem.id}`, val);
+                    } catch {}
+                  }
+                }}
                 onKeyDown={e => {
                   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                     e.preventDefault();
