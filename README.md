@@ -86,7 +86,7 @@ npm run dev
 # Client runs on http://localhost:5173
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+Open [Live URL](https://lld-practice-one.vercel.app/) in your browser.
 
 ---
 
