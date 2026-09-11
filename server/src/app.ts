@@ -51,6 +51,8 @@ app.get("/health", (_req, res) => {
 
 // ── Routes ─────────────────────────────────────────────────────────────────
 app.use("/api/v1", routes);
+app.use("/api", routes);
+app.use("/", routes);
 
 // ── Error Handling ─────────────────────────────────────────────────────────
 app.use(notFoundHandler);
