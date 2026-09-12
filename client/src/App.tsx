@@ -215,6 +215,10 @@ export default function App() {
   const [attemptToDelete, setAttemptToDelete] = useState<Attempt | null>(null);
   const [previewProblem, setPreviewProblem] = useState<Problem | null>(null);
 
+  // Responsive Layout States
+  const [studioMobileTab, setStudioMobileTab] = useState<'specs' | 'editor'>('specs');
+  const [mobileHistoryView, setMobileHistoryView] = useState<'list' | 'detail'>('list');
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -331,6 +335,7 @@ export default function App() {
 
   const selectHistoryItem = async (id: string, updateUrl = true) => {
     setSelectedHistoryId(id);
+    setMobileHistoryView('detail');
     if (updateUrl) {
       const newUrl = `?tab=history&attempt=${encodeURIComponent(id)}`;
       if (window.location.search !== newUrl) {
@@ -462,6 +467,7 @@ export default function App() {
           else {
             setSelectedHistoryId(null);
             setHistoryDetailData(null);
+            setMobileHistoryView('list');
           }
         }
         return updated;
@@ -525,6 +531,7 @@ export default function App() {
 
       setEvaluationState('none');
       setEvaluationResult(null);
+      setStudioMobileTab('editor');
       setActiveTab('practice');
 
       const newUrl = `?problem=${encodeURIComponent(attempt.problemId)}`;
@@ -574,6 +581,7 @@ export default function App() {
       setSolutionText(savedDraft);
       setAttemptId(null);
       setSubmissionId(null);
+      setStudioMobileTab('specs');
       setEvaluationState('none');
       setEvaluationResult(null);
       setError(null);
@@ -648,10 +656,10 @@ export default function App() {
       <header className="top-nav">
         <div className="nav-brand" onClick={() => { switchTab('practice'); handleBackToProblems(); }}>
           <div className="brand-icon-box">
-            <Zap size={20} className="fill-current" />
+            <Zap size={18} className="fill-current" />
           </div>
           <div className="brand-title">
-            LLD Practice
+            <span className="brand-title-text">LLD Practice</span>
             <span className="brand-tag">AI</span>
           </div>
         </div>
@@ -662,15 +670,15 @@ export default function App() {
             className={`nav-pill ${activeTab === 'practice' ? 'active' : ''}`}
             onClick={() => switchTab('practice')}
           >
-            <Code2 size={16} />
-            Practice
+            <Code2 size={15} />
+            <span className="nav-pill-text">Practice</span>
           </button>
           <button
             className={`nav-pill ${activeTab === 'history' ? 'active' : ''}`}
             onClick={() => switchTab('history')}
           >
-            <History size={16} />
-            My History
+            <History size={15} />
+            <span className="nav-pill-text">My History</span>
             {history.length > 0 && (
               <span className="nav-count-badge">{history.length}</span>
             )}
@@ -678,9 +686,9 @@ export default function App() {
         </div>
 
         {/* Live Engine Status Badge */}
-        <div className="nav-status-badge">
+        <div className="nav-status-badge" title="AI Evaluation Engine Ready">
           <div className="radar-dot" />
-          <span>AI Ready</span>
+          <span className="nav-status-text">AI Ready</span>
         </div>
       </header>
 
@@ -819,7 +827,27 @@ export default function App() {
 
       {/* ═══ VIEW 2: SPLIT-PANE ARCHITECTURE STUDIO ═══ */}
       {activeTab === 'practice' && selectedProblem && (
-        <div className="studio-layout fade-in">
+        <div className="studio-layout fade-in" data-mobile-tab={studioMobileTab}>
+          {/* Mobile / Small Tablet Segmented Tab Switcher (<1024px) */}
+          <div className="studio-mobile-tabs">
+            <button
+              type="button"
+              className={`studio-mobile-tab-btn ${studioMobileTab === 'specs' ? 'active' : ''}`}
+              onClick={() => setStudioMobileTab('specs')}
+            >
+              <Target size={14} />
+              <span>Problem Specs</span>
+            </button>
+            <button
+              type="button"
+              className={`studio-mobile-tab-btn ${studioMobileTab === 'editor' ? 'active' : ''}`}
+              onClick={() => setStudioMobileTab('editor')}
+            >
+              <Code2 size={14} />
+              <span>Code Editor</span>
+            </button>
+          </div>
+
           {/* Left Specs Pane */}
           <aside className="studio-specs-pane">
             <div className="studio-specs-header">
@@ -851,6 +879,18 @@ export default function App() {
             <div style={{ background: 'rgba(16, 22, 38, 0.4)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 10, padding: 14, fontSize: 13, color: '#94a3b8', lineHeight: 1.6 }}>
               💡 Keep your classes simple, give each class one job, and make sure all requirements are covered.
             </div>
+
+            {/* Mobile Quick Action to jump to Code Editor */}
+            <div className="studio-specs-mobile-cta">
+              <button
+                type="button"
+                className="btn-primary-glow"
+                style={{ width: '100%', justifyContent: 'center', marginTop: 18 }}
+                onClick={() => setStudioMobileTab('editor')}
+              >
+                Open Code Editor <ChevronRight size={15} />
+              </button>
+            </div>
           </aside>
 
           {/* Right Editor Pane */}
@@ -868,7 +908,16 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  type="button"
+                  className="studio-mobile-toggle-btn"
+                  onClick={() => setStudioMobileTab('specs')}
+                  title="View Problem Specs"
+                >
+                  <BookOpen size={13} />
+                  <span>Specs</span>
+                </button>
                 <button
                   onClick={copySolutionCode}
                   style={{
@@ -1082,7 +1131,7 @@ export default function App() {
 
       {/* ═══ VIEW 3: MASTER-DETAIL HISTORY INSPECTOR ═══ */}
       {activeTab === 'history' && (
-        <main className="history-layout fade-in">
+        <main className="history-layout fade-in" data-mobile-view={mobileHistoryView}>
           <div className="history-grid-view">
             {/* Left Master List */}
             <div className="history-master-pane">
@@ -1131,6 +1180,14 @@ export default function App() {
             <div className="history-detail-pane">
               {selectedAttempt ? (
                 <>
+                  <button
+                    type="button"
+                    className="history-mobile-back-btn"
+                    onClick={() => setMobileHistoryView('list')}
+                  >
+                    <ArrowLeft size={14} /> Back to Attempts
+                  </button>
+
                   <div className="history-detail-header">
                     <div>
                       <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: '#f8fafc' }}>
