@@ -54,11 +54,21 @@ interface EvaluationScore {
   codeQuality: number;
 }
 
+interface CriterionFeedback {
+  criterion: string;
+  score: number;
+  evidence: string[];
+  concern: string;
+  suggestion: string;
+  confidence: number;
+}
+
 interface EvaluationFeedback {
   summary: string;
   strengths: string[];
   improvements: string[];
   recommendations: string[];
+  criteria?: CriterionFeedback[];
 }
 
 interface EvaluationResult {
@@ -156,6 +166,95 @@ function getProblemTags(title: string): string[] {
   if (lower.includes('rate')) return ['Logic', 'Counter', 'Clean Code'];
   if (lower.includes('snake')) return ['Game Rules', 'Grid', 'Clean Code'];
   return ['OOP Design', 'Clean Code'];
+}
+
+function CriterionFeedbackSection({ criteria }: { criteria?: CriterionFeedback[] }) {
+  if (!criteria || criteria.length === 0) return null;
+
+  return (
+    <div className="feedback-container">
+      <div className="feedback-bubble">
+        <div className="feedback-bubble-title" style={{ color: '#a5b4fc' }}>
+          <Target size={15} /> Criterion-by-Criterion Analysis
+        </div>
+        <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.6 }}>
+          Each score is supported by evidence from your submitted design, along with a specific concern and an actionable suggestion.
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {criteria.map((item, index) => {
+          const score = Math.max(1, Math.min(10, Math.round(item.score)));
+          const confidence = Math.max(0, Math.min(1, item.confidence));
+
+          return (
+            <div key={`${item.criterion}-${index}`} className="feedback-bubble" style={{ padding: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f8fafc', fontWeight: 800, fontSize: 14 }}>
+                  <Target size={15} className="text-indigo-400" />
+                  {item.criterion}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: '#f8fafc', whiteSpace: 'nowrap' }}>
+                  {score} / 10
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                <div style={{ padding: 12, borderRadius: 10, background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.14)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#34d399', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 7 }}>
+                    Evidence
+                  </div>
+                  {item.evidence?.length ? (
+                    <ul className="bullet-list" style={{ margin: 0 }}>
+                      {item.evidence.map((evidence, evidenceIndex) => (
+                        <li key={evidenceIndex}>
+                          <span style={{ color: '#10b981' }}>✓</span> {evidence}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div style={{ color: '#64748b', fontSize: 12.5 }}>No specific evidence provided.</div>
+                  )}
+                </div>
+
+                <div style={{ padding: 12, borderRadius: 10, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.14)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 7 }}>
+                    Concern
+                  </div>
+                  <div style={{ color: '#cbd5e1', fontSize: 12.5, lineHeight: 1.6 }}>
+                    {item.concern || 'No specific concern identified.'}
+                  </div>
+                </div>
+
+                <div style={{ padding: 12, borderRadius: 10, background: 'rgba(129,140,248,0.06)', border: '1px solid rgba(129,140,248,0.14)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 7 }}>
+                    Suggestion
+                  </div>
+                  <div style={{ color: '#cbd5e1', fontSize: 12.5, lineHeight: 1.6 }}>
+                    {item.suggestion || 'Continue improving this part of the design.'}
+                  </div>
+                </div>
+
+                <div style={{ padding: 12, borderRadius: 10, background: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.14)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#67e8f9', textTransform: 'uppercase', letterSpacing: 0.7 }}>
+                      Confidence
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: '#f8fafc', fontSize: 12.5 }}>
+                      {Math.round(confidence * 100)}%
+                    </div>
+                  </div>
+                  <div className="rubric-track">
+                    <div className="rubric-fill" style={{ width: `${confidence * 100}%` }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function getNavStateFromUrl() {
@@ -1067,6 +1166,11 @@ export default function App() {
                   ))}
                 </div>
 
+                {/* Explainable Criterion-Level Feedback */}
+                {evaluationResult.feedback && (
+                  <CriterionFeedbackSection criteria={evaluationResult.feedback.criteria} />
+                )}
+
                 {/* Feedback Sections */}
                 {evaluationResult.feedback && (
                   <div className="feedback-container">
@@ -1268,6 +1372,11 @@ export default function App() {
                               </div>
                             ))}
                           </div>
+
+                          {/* Explainable Criterion-Level Feedback */}
+                          {historyDetailData.evaluation.feedback && (
+                            <CriterionFeedbackSection criteria={historyDetailData.evaluation.feedback.criteria} />
+                          )}
 
                           {/* Feedback Summary */}
                           {historyDetailData.evaluation.feedback && (
